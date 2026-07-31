@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -80,7 +81,6 @@ fun CollectionContentScreen(
     val listState = rememberLazyListState()
     var showActionsMenu by remember { mutableStateOf(false) }
     var showExportOptionsDialog by remember { mutableStateOf(false) }
-    val sharedData = collectionEnvironment.articleAnswerSwitchState()
 
     LaunchedEffect(screenViewModel) {
         if (screenViewModel.allData.isEmpty()) {
@@ -161,53 +161,73 @@ fun CollectionContentScreen(
                 onDismiss = screenViewModel::dismissExportDialog,
             )
         }
-        PaginatedList(
-            items = screenViewModel.displayItems,
-            onLoadMore = { screenViewModel.loadMore(collectionEnvironment) },
-            isEnd = { screenViewModel.isEnd },
-            listState = listState,
+        CollectionContentBody(
+            viewModel = screenViewModel,
+            environment = collectionEnvironment,
+            collectionId = collectionId,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
-                .padding(innerPadding)
-                .testTag("collection_content_list"),
-            footer = ProgressIndicatorFooter,
-            topContent = {
-                item(0) {
-                    Text(
-                        listOfNotNull(
-                            "${screenViewModel.collection?.itemCount} 条收藏",
-                            "${screenViewModel.collection?.likeCount} 个赞同",
-                            "${screenViewModel.collection?.commentCount} 条评论",
-                            screenViewModel.collection?.updatedTime?.let { "${formatArticleDateTime(it)} 更新" },
-                        ).fastJoinToString(" · "),
-                        modifier = Modifier.testTag("collection_content_stats"),
-                    )
-                }
-            },
-        ) { item ->
-            FeedCard(
-                item = item,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .testTag("collection_content_item_${item.stableKey}"),
-            ) {
-                val dest = navDestination
-                if (dest is Article && dest.type == ArticleType.Answer && sharedData != null) {
-                    val idx = screenViewModel.displayItems.indexOf(item)
-                    val nextItems = if (idx >= 0) screenViewModel.allData.drop(idx + 1) else emptyList()
-                    val prevItems = if (idx > 0) screenViewModel.allData.take(idx).reversed() else emptyList()
-                    sharedData.pendingNavigator = CollectionAnswerNavigator(
-                        collectionId = collectionId,
-                        collectionTitle = screenViewModel.title,
-                        initialNextItems = nextItems,
-                        initialPreviousItems = prevItems,
-                        environment = collectionEnvironment,
-                    )
-                }
-                dest?.let { navigator.onNavigate(it) }
+                .padding(innerPadding),
+            listState = listState,
+            tagPrefix = "collection_content",
+        )
+    }
+}
+
+@Composable
+fun CollectionContentBody(
+    viewModel: CollectionContentViewModel,
+    environment: CollectionContentEnvironment,
+    collectionId: String,
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
+    tagPrefix: String,
+) {
+    val navigator = LocalNavigator.current
+    val sharedData = environment.articleAnswerSwitchState()
+    PaginatedList(
+        items = viewModel.displayItems,
+        onLoadMore = { viewModel.loadMore(environment) },
+        isEnd = { viewModel.isEnd },
+        listState = listState,
+        modifier = modifier.testTag("${tagPrefix}_list"),
+        footer = ProgressIndicatorFooter,
+        topContent = {
+            item(0) {
+                Text(
+                    listOfNotNull(
+                        "${viewModel.collection?.itemCount} 条收藏",
+                        "${viewModel.collection?.likeCount} 个赞同",
+                        "${viewModel.collection?.commentCount} 条评论",
+                        viewModel.collection?.updatedTime?.let { "${formatArticleDateTime(it)} 更新" },
+                    ).fastJoinToString(" · "),
+                    modifier = Modifier.testTag("${tagPrefix}_stats"),
+                )
             }
+        },
+    ) { item ->
+        FeedCard(
+            item = item,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp)
+                .testTag("${tagPrefix}_item_${item.stableKey}"),
+        ) {
+            val dest = navDestination
+            if (dest is Article && dest.type == ArticleType.Answer && sharedData != null) {
+                val idx = viewModel.displayItems.indexOf(item)
+                val nextItems = if (idx >= 0) viewModel.allData.drop(idx + 1) else emptyList()
+                val prevItems = if (idx > 0) viewModel.allData.take(idx).reversed() else emptyList()
+                sharedData.pendingNavigator = CollectionAnswerNavigator(
+                    collectionId = collectionId,
+                    collectionTitle = viewModel.title,
+                    initialNextItems = nextItems,
+                    initialPreviousItems = prevItems,
+                    environment = environment,
+                )
+            }
+            dest?.let { navigator.onNavigate(it) }
         }
     }
 }

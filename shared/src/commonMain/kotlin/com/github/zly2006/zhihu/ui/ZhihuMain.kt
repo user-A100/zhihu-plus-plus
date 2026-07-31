@@ -222,7 +222,7 @@ fun ZhihuMain(
         Triple(HotList, "热榜", Icons.Filled.Whatshot),
         Triple(Daily, "日报", Icons.Filled.Newspaper),
         Triple(OnlineHistory, "历史", Icons.Filled.History),
-        Triple(MyCollections, "收藏夹", Icons.Filled.Bookmarks),
+        Triple(MyCollections, "收藏", Icons.Filled.Bookmarks),
         Triple(Account, "账号", Icons.Filled.ManageAccounts),
     )
     val bottomBarItems = selectedBottomBarItemKeys.mapNotNull { key ->
@@ -573,18 +573,19 @@ private fun MainTabsPager(
                 scrollToTopTrigger = scrollToTopTrigger,
                 isActive = pagerState.currentPage == pageIndex,
             )
-            MainTabPage.MyCollectionsPage -> MyCollectionsTopLevelPage()
+            MainTabPage.MyCollectionsPage -> MyCollectionsTopLevelPage(scrollToTopTrigger)
             MainTabPage.AccountPage -> AccountSettingScreen(innerPadding)
         }
     }
 }
 
 @Composable
-private fun MyCollectionsTopLevelPage() {
+private fun MyCollectionsTopLevelPage(scrollToTopTrigger: Int) {
     val account = rememberAccountSettingsAccountState().value
-    CollectionScreen(
+    CollectionBrowseScreen(
         urlToken = account.urlToken,
         showBackButton = false,
+        scrollToTopTrigger = scrollToTopTrigger,
     )
 }
 

@@ -964,7 +964,7 @@ fun AppearanceSettingsScreen(
                 HotList.name to "热榜",
                 Daily.name to "日报",
                 OnlineHistory.name to "历史",
-                MyCollections.name to "收藏夹",
+                MyCollections.name to "收藏",
                 Account.name to "账号设置",
             )
             val bottomBarItemLabels = allBottomBarItems.toMap()
