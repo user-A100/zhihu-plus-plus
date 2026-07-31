@@ -612,11 +612,10 @@ private fun MyCollectionsTopLevelPage(
     innerPadding: PaddingValues,
 ) {
     val account = rememberAccountSettingsAccountState().value
-    CollectionLibraryScreen(
+    CollectionScreen(
         urlToken = account.urlToken,
         showBackButton = false,
         scrollToTopTrigger = scrollToTopTrigger,
-        innerPadding = innerPadding,
     )
 }
 

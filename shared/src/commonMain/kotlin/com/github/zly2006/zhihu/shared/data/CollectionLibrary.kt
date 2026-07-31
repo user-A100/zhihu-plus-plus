@@ -41,19 +41,3 @@ enum class HomeContentSource(
         fun fromKey(key: String?): HomeContentSource = entries.firstOrNull { it.key == key } ?: RECOMMENDATION
     }
 }
-
-enum class CollectionTimelineSort(
-    val displayName: String,
-) {
-    NEWEST("最新收藏"),
-    OLDEST("最早收藏"),
-}
-
-enum class CollectionTimelineGrouping(
-    val displayName: String,
-) {
-    NONE("不分组"),
-    WEEK("按周"),
-    MONTH("按月"),
-    YEAR("按年"),
-}

@@ -17,10 +17,8 @@
 
 package com.github.zly2006.zhihu.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,13 +33,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -65,8 +59,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.zly2006.zhihu.navigation.Collections
 import com.github.zly2006.zhihu.navigation.LocalNavigator
-import com.github.zly2006.zhihu.shared.data.CollectionTimelineGrouping
-import com.github.zly2006.zhihu.shared.data.CollectionTimelineSort
 import com.github.zly2006.zhihu.shared.data.navDestination
 import com.github.zly2006.zhihu.shared.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.shared.ui.TopLevelReselectAction
@@ -75,11 +67,6 @@ import com.github.zly2006.zhihu.ui.components.FeedCard
 import com.github.zly2006.zhihu.viewmodel.CollectionLibraryItem
 import com.github.zly2006.zhihu.viewmodel.CollectionLibraryViewModel
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.number
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,26 +84,12 @@ fun CollectionLibraryScreen(
 
     var searchVisible by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    var sort by remember { mutableStateOf(CollectionTimelineSort.NEWEST) }
-    var grouping by remember { mutableStateOf(CollectionTimelineGrouping.MONTH) }
-    var groupingMenuExpanded by remember { mutableStateOf(false) }
     var cachedScrollToTopTrigger by remember { mutableStateOf(scrollToTopTrigger) }
 
     val filteredItems by remember {
         derivedStateOf {
             screenViewModel.items
                 .filter { query.isBlank() || query.lowercase() in it.searchableText }
-                .let { items ->
-                    when (sort) {
-                        CollectionTimelineSort.NEWEST -> items.sortedByDescending(CollectionLibraryItem::collectedAt)
-                        CollectionTimelineSort.OLDEST -> items.sortedBy(CollectionLibraryItem::collectedAt)
-                    }
-                }
-        }
-    }
-    val timelineRows by remember {
-        derivedStateOf {
-            buildCollectionTimelineRows(filteredItems, grouping)
         }
     }
 
@@ -219,42 +192,6 @@ fun CollectionLibraryScreen(
                     )
                 }
 
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    CollectionTimelineSort.entries.forEach { option ->
-                        FilterChip(
-                            selected = sort == option,
-                            onClick = { sort = option },
-                            label = { Text(option.displayName) },
-                        )
-                    }
-                    Box {
-                        AssistChip(
-                            onClick = { groupingMenuExpanded = true },
-                            label = { Text(grouping.displayName) },
-                        )
-                        DropdownMenu(
-                            expanded = groupingMenuExpanded,
-                            onDismissRequest = { groupingMenuExpanded = false },
-                        ) {
-                            CollectionTimelineGrouping.entries.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text(option.displayName) },
-                                    onClick = {
-                                        grouping = option
-                                        groupingMenuExpanded = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-
                 if (screenViewModel.isSyncing) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
@@ -294,22 +231,14 @@ fun CollectionLibraryScreen(
                             ),
                         ) {
                             items(
-                                items = timelineRows,
-                                key = CollectionTimelineRow::key,
-                            ) { row ->
-                                when (row) {
-                                    is CollectionTimelineRow.Header -> CollectionTimelineHeader(row.label)
-                                    is CollectionTimelineRow.Content -> {
-                                        val displayItem = row.item.displayItem.copy(
-                                            details = "${row.item.displayItem.details} · 收藏于 ${formatCollectionDate(row.item.collectedAt)}",
-                                        )
-                                        FeedCard(
-                                            item = displayItem,
-                                            modifier = Modifier.testTag("collection_library_item_${row.item.contentKey}"),
-                                        ) {
-                                            navDestination?.let { navigator.onNavigate(it) }
-                                        }
-                                    }
+                                items = filteredItems,
+                                key = CollectionLibraryItem::contentKey,
+                            ) { item ->
+                                FeedCard(
+                                    item = item.displayItem,
+                                    modifier = Modifier.testTag("collection_library_item_${item.contentKey}"),
+                                ) {
+                                    navDestination?.let { navigator.onNavigate(it) }
                                 }
                             }
                         }
@@ -346,82 +275,6 @@ private fun CollectionLibraryEmptyState(
             }
         }
     }
-}
-
-@Composable
-private fun CollectionTimelineHeader(label: String) {
-    Text(
-        text = label,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-    )
-}
-
-private sealed interface CollectionTimelineRow {
-    val key: String
-
-    data class Header(
-        val label: String,
-    ) : CollectionTimelineRow {
-        override val key: String = "header:$label"
-    }
-
-    data class Content(
-        val item: CollectionLibraryItem,
-    ) : CollectionTimelineRow {
-        override val key: String = "content:${item.contentKey}"
-    }
-}
-
-private fun buildCollectionTimelineRows(
-    items: List<CollectionLibraryItem>,
-    grouping: CollectionTimelineGrouping,
-): List<CollectionTimelineRow> {
-    if (grouping == CollectionTimelineGrouping.NONE) {
-        return items.map(CollectionTimelineRow::Content)
-    }
-    val rows = mutableListOf<CollectionTimelineRow>()
-    var previousGroup: String? = null
-    items.forEach { item ->
-        val group = collectionGroupLabel(item.collectedAt, grouping)
-        if (group != previousGroup) {
-            rows += CollectionTimelineRow.Header(group)
-            previousGroup = group
-        }
-        rows += CollectionTimelineRow.Content(item)
-    }
-    return rows
-}
-
-private fun collectionGroupLabel(
-    epochMillis: Long,
-    grouping: CollectionTimelineGrouping,
-): String {
-    val date = Instant
-        .fromEpochMilliseconds(epochMillis)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date
-    return when (grouping) {
-        CollectionTimelineGrouping.NONE -> ""
-        CollectionTimelineGrouping.YEAR -> "${date.year}年"
-        CollectionTimelineGrouping.MONTH -> "${date.year}年${date.month.number}月"
-        CollectionTimelineGrouping.WEEK -> {
-            val weekStart = LocalDate.fromEpochDays(date.toEpochDays() - date.dayOfWeek.ordinal)
-            val weekEnd = LocalDate.fromEpochDays(weekStart.toEpochDays() + 6)
-            "${weekStart.month.number}月${weekStart.day}日—${weekEnd.month.number}月${weekEnd.day}日"
-        }
-    }
-}
-
-private fun formatCollectionDate(epochMillis: Long): String {
-    val date = Instant
-        .fromEpochMilliseconds(epochMillis)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date
-    return "${date.year}-${date.month.number.toString().padStart(2, '0')}-${date.day.toString().padStart(2, '0')}"
 }
 
 private const val COLLECTION_LIBRARY_SEARCH_ACTION_TAG = "collection_library_search_action"

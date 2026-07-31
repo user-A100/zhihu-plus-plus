@@ -29,6 +29,7 @@ import com.github.zly2006.zhihu.shared.data.ZhihuJson
 import com.github.zly2006.zhihu.shared.data.ZhihuPaging
 import com.github.zly2006.zhihu.shared.data.navDestination
 import com.github.zly2006.zhihu.shared.data.toFeedDisplayItemNavDestinationJson
+import com.github.zly2006.zhihu.shared.util.Log
 import com.github.zly2006.zhihu.ui.Collection
 import com.github.zly2006.zhihu.viewmodel.filter.CollectionIndexDao
 import com.github.zly2006.zhihu.viewmodel.filter.CollectionIndexItem
@@ -95,8 +96,10 @@ class CollectionLibraryViewModel(
             isSyncing = true
             errorMessage = null
             syncProgress = "正在读取收藏夹"
+            val syncStart = Clock.System.now().toEpochMilliseconds()
             try {
                 val collections = fetchAllCollections(environment, urlToken)
+                Log.i("ZhicangPerf", "fetchCollections: ${collections.size} in ${Clock.System.now().toEpochMilliseconds() - syncStart}ms", null)
                 val collectionIds = collections.map { it.id }
                 dao.retainCollections(collectionIds)
 
@@ -121,11 +124,13 @@ class CollectionLibraryViewModel(
                             completed = false,
                         ),
                     )
+                    val colStart = Clock.System.now().toEpochMilliseconds()
                     try {
                         val remoteItems = fetchAllCollectionItems(environment, collection.id)
                         val indexedItems = remoteItems.mapNotNull { item ->
                             item.toIndexItem(collection)
                         }
+                        Log.i("ZhicangPerf", "fetchItems[${collection.title}]: raw=${remoteItems.size} indexed=${indexedItems.size} in ${Clock.System.now().toEpochMilliseconds() - colStart}ms", null)
                         dao.replaceCollection(
                             collectionId = collection.id,
                             items = indexedItems,
@@ -146,6 +151,7 @@ class CollectionLibraryViewModel(
                 }
 
                 reloadFromDatabase()
+                Log.i("ZhicangPerf", "syncTotal: collections=${collections.size} failed=$failedCount items=${items.size} total=${Clock.System.now().toEpochMilliseconds() - syncStart}ms", null)
                 syncProgress = if (failedCount == 0) {
                     "收藏已同步"
                 } else {
@@ -162,10 +168,17 @@ class CollectionLibraryViewModel(
     }
 
     private suspend fun reloadFromDatabase() {
+        val start = Clock.System.now().toEpochMilliseconds()
+        val allItems = dao.getAllItems()
+        val t1 = Clock.System.now().toEpochMilliseconds()
+        val merged = mergeCollectionIndexItems(allItems)
+        val t2 = Clock.System.now().toEpochMilliseconds()
         items.clear()
-        items.addAll(mergeCollectionIndexItems(dao.getAllItems()))
+        items.addAll(merged)
         syncStates.clear()
         syncStates.addAll(dao.getAllSyncStates())
+        val t3 = Clock.System.now().toEpochMilliseconds()
+        Log.i("ZhicangPerf", "reload: rows=${allItems.size} query=${t1 - start}ms merge=${t2 - t1}ms states=${t3 - t2}ms total=${t3 - start}ms", null)
     }
 }
 

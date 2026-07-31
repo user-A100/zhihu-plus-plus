@@ -54,6 +54,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.zly2006.zhihu.navigation.CollectionContent
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.shared.platform.rememberUserMessageSink
+import com.github.zly2006.zhihu.shared.ui.TopLevelReselectAction
+import com.github.zly2006.zhihu.shared.ui.topLevelReselectAction
 import com.github.zly2006.zhihu.ui.Collection
 import com.github.zly2006.zhihu.ui.components.CreateCollectionDialog
 import com.github.zly2006.zhihu.ui.components.PaginatedList
@@ -68,6 +70,7 @@ fun CollectionScreen(
     urlToken: String?,
     testCollections: List<Collection>? = null,
     showBackButton: Boolean = true,
+    scrollToTopTrigger: Int = 0,
 ) {
     val navigator = LocalNavigator.current
     val environment = rememberPaginationEnvironment(allowGuestAccess = false)
@@ -81,11 +84,26 @@ fun CollectionScreen(
     val collections = testCollections ?: viewModel.allData
     var showCreateCollectionDialog by remember { mutableStateOf(false) }
     var collectionPendingDeletion by remember { mutableStateOf<Collection?>(null) }
+    var cachedScrollToTopTrigger by remember { mutableStateOf(scrollToTopTrigger) }
 
     LaunchedEffect(useTestCollections) {
         if (!useTestCollections && viewModel.allData.isEmpty()) {
             viewModel.refresh(environment)
         }
+    }
+
+    LaunchedEffect(scrollToTopTrigger) {
+        when (
+            topLevelReselectAction(
+                triggerDelta = scrollToTopTrigger - cachedScrollToTopTrigger,
+                isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
+            )
+        ) {
+            TopLevelReselectAction.Refresh -> viewModel.refresh(environment)
+            TopLevelReselectAction.ScrollToTop -> listState.animateScrollToItem(0)
+            null -> Unit
+        }
+        cachedScrollToTopTrigger = scrollToTopTrigger
     }
 
     Scaffold(
