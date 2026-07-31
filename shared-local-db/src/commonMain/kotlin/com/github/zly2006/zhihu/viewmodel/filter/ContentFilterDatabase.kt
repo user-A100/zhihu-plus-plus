@@ -29,8 +29,20 @@ import com.github.zly2006.zhihu.data.applyPlatformDriver
 import kotlinx.coroutines.Dispatchers
 
 @Database(
-    entities = [ContentViewRecord::class, BlockedKeyword::class, BlockedUser::class, BlockedQuestionAuthor::class, BlockedContentRecord::class, BlockedTopic::class, BlockedFeedRecord::class, ContentOpenEvent::class],
-    version = 7,
+    entities = [
+        ContentViewRecord::class,
+        BlockedKeyword::class,
+        BlockedUser::class,
+        BlockedQuestionAuthor::class,
+        BlockedContentRecord::class,
+        BlockedTopic::class,
+        BlockedFeedRecord::class,
+        ContentOpenEvent::class,
+        CollectionIndexItem::class,
+        CollectionSyncState::class,
+        CollectionExposure::class,
+    ],
+    version = 8,
     exportSchema = false,
 )
 @ConstructedBy(ContentFilterDatabaseConstructor::class)
@@ -38,6 +50,8 @@ abstract class ContentFilterDatabase : RoomDatabase() {
     abstract fun contentFilterDao(): ContentFilterDao
 
     abstract fun contentOpenEventDao(): ContentOpenEventDao
+
+    abstract fun collectionIndexDao(): CollectionIndexDao
 
     abstract fun blockedKeywordDao(): BlockedKeywordDao
 
@@ -169,10 +183,73 @@ private val migration6To7 = object : Migration(6, 7) {
     }
 }
 
+private val migration7To8 = object : Migration(7, 8) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `${CollectionIndexItem.TABLE_NAME}` (
+                `contentKey` TEXT NOT NULL,
+                `collectionId` TEXT NOT NULL,
+                `collectionTitle` TEXT NOT NULL,
+                `contentType` TEXT NOT NULL,
+                `contentId` TEXT NOT NULL,
+                `collectedAt` INTEGER NOT NULL,
+                `title` TEXT NOT NULL,
+                `excerpt` TEXT,
+                `details` TEXT NOT NULL,
+                `authorName` TEXT,
+                `avatarUrl` TEXT,
+                `navDestinationJson` TEXT NOT NULL,
+                PRIMARY KEY(`contentKey`, `collectionId`)
+            )
+            """.trimIndent(),
+        )
+        connection.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS `index_${CollectionIndexItem.TABLE_NAME}_collectionId`
+            ON `${CollectionIndexItem.TABLE_NAME}` (`collectionId`)
+            """.trimIndent(),
+        )
+        connection.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS `index_${CollectionIndexItem.TABLE_NAME}_contentKey`
+            ON `${CollectionIndexItem.TABLE_NAME}` (`contentKey`)
+            """.trimIndent(),
+        )
+        connection.execSQL(
+            """
+            CREATE INDEX IF NOT EXISTS `index_${CollectionIndexItem.TABLE_NAME}_collectedAt`
+            ON `${CollectionIndexItem.TABLE_NAME}` (`collectedAt`)
+            """.trimIndent(),
+        )
+        connection.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `${CollectionSyncState.TABLE_NAME}` (
+                `collectionId` TEXT NOT NULL PRIMARY KEY,
+                `collectionTitle` TEXT NOT NULL,
+                `itemCount` INTEGER NOT NULL,
+                `remoteUpdatedAt` INTEGER NOT NULL,
+                `lastSyncedAt` INTEGER NOT NULL,
+                `completed` INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        connection.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `${CollectionExposure.TABLE_NAME}` (
+                `contentKey` TEXT NOT NULL PRIMARY KEY,
+                `impressionCount` INTEGER NOT NULL,
+                `lastExposedAt` INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
 fun buildContentFilterDatabase(
     builder: Builder<ContentFilterDatabase>,
 ): ContentFilterDatabase = builder
-    .addMigrations(migration2To3, migration3To4, migration4To5, migration5To6, migration6To7)
+    .addMigrations(migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8)
     .fallbackToDestructiveMigration(true)
     .applyPlatformDriver()
     .setQueryCoroutineContext(Dispatchers.Default)

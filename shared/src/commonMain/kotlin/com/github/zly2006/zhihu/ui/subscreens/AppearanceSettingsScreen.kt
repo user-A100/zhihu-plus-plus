@@ -160,11 +160,9 @@ internal fun resolveValidStartDestinationKey(
     else -> Home.name
 }
 
-internal fun defaultBottomBarSelectionKeys(duo3HomeAccount: Boolean): Set<String> = if (duo3HomeAccount) {
-    linkedSetOf(Home.name, Follow.name, Daily.name)
-} else {
-    linkedSetOf(Home.name, Follow.name, Daily.name, OnlineHistory.name, Account.name)
-}
+@Suppress("UNUSED_PARAMETER")
+internal fun defaultBottomBarSelectionKeys(duo3HomeAccount: Boolean): Set<String> =
+    linkedSetOf(Home.name, Follow.name, MyCollections.name, OnlineHistory.name, Account.name)
 
 internal fun normalizeBottomBarSelection(
     selectedKeys: Collection<String>,
@@ -176,41 +174,13 @@ internal fun normalizeBottomBarSelection(
         .filterTo(linkedSetOf()) { it in allowedKeys }
         .ifEmpty { defaultBottomBarSelectionKeys(duo3HomeAccount).toMutableSet() }
 
-    if (duo3HomeAccount) {
-        if (Home.name in normalized) {
-            normalized.remove(Account.name)
-        } else {
-            normalized.add(Account.name)
-        }
-    } else {
-        normalized.add(Account.name)
-        while (normalized.size > 5) {
-            val removableKey = listOf(
-                HotList.name,
-                MyCollections.name,
-                OnlineHistory.name,
-                Daily.name,
-                Follow.name,
-                Home.name,
-            ).firstOrNull { it in normalized } ?: break
-            normalized.remove(removableKey)
-        }
+    while (normalized.size > 5) {
+        normalized.remove(normalized.last())
     }
 
     if (enforceMinimumSelection) {
-        val fillOrder = if (duo3HomeAccount) {
-            if (Home.name in normalized) {
-                listOf(Follow.name, Daily.name, HotList.name, OnlineHistory.name)
-            } else {
-                listOf(Follow.name, Daily.name, HotList.name, OnlineHistory.name, Home.name)
-            }
-        } else {
-            listOf(Home.name, Follow.name, Daily.name, HotList.name, OnlineHistory.name, MyCollections.name, Account.name)
-        }
-        fillOrder.forEach { key ->
-            if (normalized.size < 3) {
-                normalized.add(key)
-            }
+        if (normalized.isEmpty()) {
+            normalized.add(Home.name)
         }
     }
 
@@ -964,7 +934,7 @@ fun AppearanceSettingsScreen(
                 HotList.name to "热榜",
                 Daily.name to "日报",
                 OnlineHistory.name to "历史",
-                MyCollections.name to "收藏夹",
+                MyCollections.name to "收藏",
                 Account.name to "账号设置",
             )
             val bottomBarItemLabels = allBottomBarItems.toMap()
@@ -1075,7 +1045,7 @@ fun AppearanceSettingsScreen(
                 SettingItem(
                     title = { Text("选择要在底部栏显示的页面") },
                     description = {
-                        Text("建议选择 3-5 项，可用箭头调整显示和滑动顺序。")
+                        Text("可选择 1-5 项，并用箭头调整显示和滑动顺序。长按任一底栏图标可快速回到这里。")
                     },
                     bottomAction = {
                         LazyColumn(
@@ -1100,7 +1070,7 @@ fun AppearanceSettingsScreen(
                                 } else {
                                     selectedBottomBarItemKeys.value + key
                                 }
-                                val isEnabled = key != Account.name
+                                val isEnabled = true
 
                                 Row(
                                     modifier = Modifier
@@ -1113,8 +1083,8 @@ fun AppearanceSettingsScreen(
                                         .height(bottomBarSettingItemHeight)
                                         .clickable(enabled = isEnabled) {
                                             when {
-                                                isChecked && selectedBottomBarItemKeys.value.size <= 3 -> {
-                                                    userMessages.showShortMessage("至少保留3项")
+                                                isChecked && selectedBottomBarItemKeys.value.size <= 1 -> {
+                                                    userMessages.showShortMessage("至少保留1项")
                                                 }
 
                                                 !isChecked && selectedBottomBarItemKeys.value.size >= 5 -> {

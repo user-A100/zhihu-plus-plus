@@ -31,11 +31,15 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -110,6 +114,7 @@ import com.github.zly2006.zhihu.navigation.WriteAnswer
 import com.github.zly2006.zhihu.navigation.WritePin
 import com.github.zly2006.zhihu.shared.filter.ContentOpenFrom
 import com.github.zly2006.zhihu.ui.components.NoOpPagerNestedScrollConnection
+import com.github.zly2006.zhihu.ui.subscreens.APPEARANCE_SETTINGS_BOTTOM_BAR_SECTION_KEY
 import com.github.zly2006.zhihu.ui.subscreens.AppearanceSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.BlockedFeedHistoryScreen
 import com.github.zly2006.zhihu.ui.subscreens.ColorSchemeScreen
@@ -222,7 +227,7 @@ fun ZhihuMain(
         Triple(HotList, "热榜", Icons.Filled.Whatshot),
         Triple(Daily, "日报", Icons.Filled.Newspaper),
         Triple(OnlineHistory, "历史", Icons.Filled.History),
-        Triple(MyCollections, "收藏夹", Icons.Filled.Bookmarks),
+        Triple(MyCollections, "收藏", Icons.Filled.Bookmarks),
         Triple(Account, "账号", Icons.Filled.ManageAccounts),
     )
     val bottomBarItems = selectedBottomBarItemKeys.mapNotNull { key ->
@@ -330,15 +335,16 @@ fun ZhihuMain(
                             icon: ImageVector,
                         ) {
                             val tag = "nav_tab_${destination.name.lowercase()}"
+                            val activate = {
+                                if (currentBottomDestination?.let { it::class == destination::class } != true) {
+                                    navigateTopLevel(destination)
+                                } else if (tapToScrollToTopEnabled) {
+                                    scrollToTopTrigger++
+                                }
+                            }
                             NavigationBarItem(
                                 currentBottomDestination?.let { it::class == destination::class } == true,
-                                onClick = {
-                                    if (currentBottomDestination?.let { it::class == destination::class } != true) {
-                                        navigateTopLevel(destination)
-                                    } else if (tapToScrollToTopEnabled) {
-                                        scrollToTopTrigger++
-                                    }
-                                },
+                                onClick = activate,
                                 label = { Text(label) },
                                 alwaysShowLabel = true,
                                 colors = if (!isDarkTheme) {
@@ -352,7 +358,25 @@ fun ZhihuMain(
                                     NavigationBarItemDefaults.colors()
                                 },
                                 icon = {
-                                    Icon(icon, contentDescription = label)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .combinedClickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                                onClick = activate,
+                                                onLongClick = {
+                                                    navigationState.navigate(
+                                                        Account.AppearanceSettings(
+                                                            setting = APPEARANCE_SETTINGS_BOTTOM_BAR_SECTION_KEY,
+                                                        ),
+                                                    )
+                                                },
+                                            ),
+                                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                                    ) {
+                                        Icon(icon, contentDescription = label)
+                                    }
                                 },
                                 modifier = Modifier.padding(top = 4.dp).testTag(tag),
                             )
@@ -573,18 +597,26 @@ private fun MainTabsPager(
                 scrollToTopTrigger = scrollToTopTrigger,
                 isActive = pagerState.currentPage == pageIndex,
             )
-            MainTabPage.MyCollectionsPage -> MyCollectionsTopLevelPage()
+            MainTabPage.MyCollectionsPage -> MyCollectionsTopLevelPage(
+                scrollToTopTrigger = scrollToTopTrigger,
+                innerPadding = innerPadding,
+            )
             MainTabPage.AccountPage -> AccountSettingScreen(innerPadding)
         }
     }
 }
 
 @Composable
-private fun MyCollectionsTopLevelPage() {
+private fun MyCollectionsTopLevelPage(
+    scrollToTopTrigger: Int,
+    innerPadding: PaddingValues,
+) {
     val account = rememberAccountSettingsAccountState().value
-    CollectionScreen(
+    CollectionLibraryScreen(
         urlToken = account.urlToken,
         showBackButton = false,
+        scrollToTopTrigger = scrollToTopTrigger,
+        innerPadding = innerPadding,
     )
 }
 
@@ -592,6 +624,7 @@ private val TopLevelDestination.openFrom: String?
     get() = when (this) {
         Home -> ContentOpenFrom.HOME_FEED
         OnlineHistory -> ContentOpenFrom.HISTORY
+        MyCollections -> ContentOpenFrom.COLLECTION
         else -> null
     }
 

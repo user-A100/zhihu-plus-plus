@@ -56,12 +56,14 @@ import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.MarkUnreadChatAlt
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -99,8 +101,11 @@ import com.github.zly2006.zhihu.navigation.Pin
 import com.github.zly2006.zhihu.navigation.Search
 import com.github.zly2006.zhihu.navigation.WritePin
 import com.github.zly2006.zhihu.shared.aigc.AIGC_MARKING_ENABLED_PREFERENCE_KEY
+import com.github.zly2006.zhihu.shared.data.COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY
 import com.github.zly2006.zhihu.shared.data.DataHolder
 import com.github.zly2006.zhihu.shared.data.Feed
+import com.github.zly2006.zhihu.shared.data.HOME_CONTENT_SOURCE_PREFERENCE_KEY
+import com.github.zly2006.zhihu.shared.data.HomeContentSource
 import com.github.zly2006.zhihu.shared.data.RecommendationMode
 import com.github.zly2006.zhihu.shared.data.ZHIHU_ME_URL
 import com.github.zly2006.zhihu.shared.data.ZhihuJson
@@ -132,6 +137,7 @@ import com.github.zly2006.zhihu.ui.components.rememberFeedBlockActions
 import com.github.zly2006.zhihu.ui.subscreens.DEFAULT_FAB_OPACITY
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FAB_OPACITY
 import com.github.zly2006.zhihu.viewmodel.feed.BaseFeedViewModel
+import com.github.zly2006.zhihu.viewmodel.feed.CollectionHomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedInteractionViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.local.LocalHomeFeedViewModel
@@ -139,6 +145,7 @@ import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.za.AndroidHomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.za.MixedHomeFeedViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 
 const val PREFERENCE_NAME = "com.github.zly2006.zhihu_preferences"
@@ -163,6 +170,51 @@ fun homeAuthorPollAnnouncementTag(pinId: Long): String = "$HOME_AUTHOR_POLL_ANNO
 
 fun homePinAnnouncementReadKey(pinId: Long): String = "readHomePinAnnouncement_$pinId"
 
+@Composable
+private fun HomeContentSourceMenu(
+    expanded: Boolean,
+    currentSource: HomeContentSource,
+    onExpandedChange: (Boolean) -> Unit,
+    onSourceSelected: (HomeContentSource) -> Unit,
+) {
+    Box {
+        IconButton(
+            onClick = { onExpandedChange(true) },
+            modifier = Modifier.testTag("home_content_source_button"),
+        ) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = "切换首页内容来源：${currentSource.displayName}",
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+        ) {
+            HomeContentSource.entries.forEach { source ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(source.displayName)
+                            Text(
+                                source.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    onClick = { onSourceSelected(source) },
+                    trailingIcon = {
+                        if (source == currentSource) {
+                            Text("当前", style = MaterialTheme.typography.labelMedium)
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
 /**
  * 首页信息流页面。
  *
@@ -183,6 +235,28 @@ fun HomeScreen(
     val userMessages = rememberUserMessageSink()
     val openExternalUrl = rememberExternalUrlOpener()
     val lifecycleOwner = LocalLifecycleOwner.current
+    var homeContentSource by remember {
+        mutableStateOf(
+            HomeContentSource.fromKey(
+                settings.getString(HOME_CONTENT_SOURCE_PREFERENCE_KEY, HomeContentSource.RECOMMENDATION.key),
+            ),
+        )
+    }
+    var selectedCollectionIds by remember {
+        mutableStateOf(settings.getStringSet(COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY, emptySet()))
+    }
+    var showHomeContentSourceMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            homeContentSource = HomeContentSource.fromKey(
+                settings.getString(HOME_CONTENT_SOURCE_PREFERENCE_KEY, HomeContentSource.RECOMMENDATION.key),
+            )
+            selectedCollectionIds =
+                settings.getStringSet(COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY, emptySet())
+            awaitCancellation()
+        }
+    }
 
     val duo3HomeAccount = settings.getBoolean("duo3_home_account", false)
     val showRefreshFab = settings.getBoolean("showRefreshFab", true)
@@ -210,13 +284,21 @@ fun HomeScreen(
     val requestLogin = rememberHomeLoginRequester()
     val feedBlockActions = rememberFeedBlockActions()
     val isLiteVariant = rememberIsLiteVariant()
-    val viewModel: BaseFeedViewModel = when (currentRecommendationMode) {
-        RecommendationMode.WEB -> viewModel { HomeFeedViewModel() }
-        RecommendationMode.ANDROID -> viewModel { AndroidHomeFeedViewModel() }
-        RecommendationMode.LOCAL -> viewModel { LocalHomeFeedViewModel() }
-        RecommendationMode.MIXED -> viewModel { MixedHomeFeedViewModel() }
+    val viewModel: BaseFeedViewModel = when (homeContentSource) {
+        HomeContentSource.COLLECTION_REVISIT -> viewModel(
+            key = "collection-home-${selectedCollectionIds.sorted().joinToString(",")}",
+        ) {
+            CollectionHomeFeedViewModel(selectedCollectionIds)
+        }
+        HomeContentSource.RECOMMENDATION -> when (currentRecommendationMode) {
+            RecommendationMode.WEB -> viewModel(key = "recommendation-web") { HomeFeedViewModel() }
+            RecommendationMode.ANDROID -> viewModel(key = "recommendation-android") { AndroidHomeFeedViewModel() }
+            RecommendationMode.LOCAL -> viewModel(key = "recommendation-local") { LocalHomeFeedViewModel() }
+            RecommendationMode.MIXED -> viewModel(key = "recommendation-mixed") { MixedHomeFeedViewModel() }
+        }
     }
     val localHomeViewModel = viewModel as? LocalHomeFeedViewModel
+    val collectionHomeViewModel = viewModel as? CollectionHomeFeedViewModel
 
     val keySurveyDone = "survey_feedback_done"
     val installed3Hours = !settings.getBoolean(keySurveyDone, false) && installedAtLeastThreeHours
@@ -272,15 +354,28 @@ fun HomeScreen(
     }
 
     val latestLoadedDisplayItems = viewModel.latestLoadedDisplayItems.value
-    LaunchedEffect(latestLoadedDisplayItems) {
-        if (latestLoadedDisplayItems.isNotEmpty()) {
+    LaunchedEffect(homeContentSource, latestLoadedDisplayItems) {
+        if (
+            homeContentSource == HomeContentSource.RECOMMENDATION &&
+            latestLoadedDisplayItems.isNotEmpty()
+        ) {
             startupCache.writeHomeFeedStartupCache(latestLoadedDisplayItems)
         }
     }
 
     // 初始加载
-    LaunchedEffect(currentRecommendationMode, account.isLoggedIn, autoRefreshOnStartup) {
-        if (!account.isLoggedIn &&
+    LaunchedEffect(
+        homeContentSource,
+        currentRecommendationMode,
+        selectedCollectionIds,
+        account.isLoggedIn,
+        autoRefreshOnStartup,
+    ) {
+        if (homeContentSource == HomeContentSource.COLLECTION_REVISIT) {
+            if (viewModel.displayItems.isEmpty()) {
+                viewModel.refresh(paginationEnvironment)
+            }
+        } else if (!account.isLoggedIn &&
             settings.getBoolean("loginForRecommendation", true)
         ) {
             requestLogin()
@@ -435,6 +530,16 @@ fun HomeScreen(
                                     }
                                 }
                             }
+                            HomeContentSourceMenu(
+                                expanded = showHomeContentSourceMenu,
+                                currentSource = homeContentSource,
+                                onExpandedChange = { showHomeContentSourceMenu = it },
+                                onSourceSelected = { source ->
+                                    homeContentSource = source
+                                    settings.putString(HOME_CONTENT_SOURCE_PREFERENCE_KEY, source.key)
+                                    showHomeContentSourceMenu = false
+                                },
+                            )
                         }
                     }
                 } else {
@@ -497,6 +602,16 @@ fun HomeScreen(
                                     )
                                 }
                             }
+                            HomeContentSourceMenu(
+                                expanded = showHomeContentSourceMenu,
+                                currentSource = homeContentSource,
+                                onExpandedChange = { showHomeContentSourceMenu = it },
+                                onSourceSelected = { source ->
+                                    homeContentSource = source
+                                    settings.putString(HOME_CONTENT_SOURCE_PREFERENCE_KEY, source.key)
+                                    showHomeContentSourceMenu = false
+                                },
+                            )
                         }
                     }
                 }
@@ -642,13 +757,25 @@ fun HomeScreen(
                         }
                     },
                 ) { item ->
+                    if (collectionHomeViewModel != null) {
+                        LaunchedEffect(item.stableKey) {
+                            collectionHomeViewModel.markExposed(item)
+                        }
+                    }
                     FeedCard(
                         item,
                         thumbnailUrl = when (val target = item.feed?.target) {
                             is Feed.AnswerTarget -> target.thumbnail
                             else -> null
                         },
-                        menuItems = { dismissMenu ->
+                        menuItems = homeFeedMenu@{ dismissMenu ->
+                            if (homeContentSource == HomeContentSource.COLLECTION_REVISIT) {
+                                DropdownMenuItem(
+                                    text = { Text("来自收藏重温") },
+                                    onClick = dismissMenu,
+                                )
+                                return@homeFeedMenu
+                            }
                             if (!isLiteVariant) {
                                 DropdownMenuItem(
                                     text = { Text("按关键词屏蔽") },

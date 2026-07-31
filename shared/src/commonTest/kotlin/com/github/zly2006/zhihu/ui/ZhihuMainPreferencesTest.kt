@@ -36,40 +36,43 @@ import kotlin.test.assertTrue
 
 class ZhihuMainPreferencesTest {
     @Test
-    fun defaultBottomBarSelectionMatchesNavigationMode() {
-        assertEquals(
-            linkedSetOf(Home.name, Follow.name, Daily.name),
-            defaultBottomBarSelectionKeys(duo3HomeAccount = true),
+    fun defaultBottomBarSelectionIsUnifiedAndIgnoresDuo3Flag() {
+        // 产品决策：底栏统一默认（主页、关注、收藏、历史、账号），不再随 duo3 变化
+        val expected = linkedSetOf(
+            Home.name,
+            Follow.name,
+            MyCollections.name,
+            OnlineHistory.name,
+            Account.name,
         )
-        assertEquals(
-            linkedSetOf(Home.name, Follow.name, Daily.name, OnlineHistory.name, Account.name),
-            defaultBottomBarSelectionKeys(duo3HomeAccount = false),
-        )
+        assertEquals(expected, defaultBottomBarSelectionKeys(duo3HomeAccount = false))
+        assertEquals(expected, defaultBottomBarSelectionKeys(duo3HomeAccount = true))
     }
 
     @Test
-    fun normalizeBottomBarSelectionKeepsAccountAsSeparateTabWhenHomeAccountIsOff() {
+    fun normalizeKeepsAFiveItemSelectionIntactWithoutForcingAccount() {
+        // 新规则：1-5 项，账号不再被强制加入，原选择被原样保留
         val normalized = normalizeBottomBarSelection(
             selectedKeys = linkedSetOf(Home.name, Follow.name, HotList.name, Daily.name, OnlineHistory.name),
             duo3HomeAccount = false,
         )
 
         assertEquals(5, normalized.size)
-        assertTrue(Account.name in normalized)
-        assertFalse(HotList.name in normalized)
+        assertTrue(Home.name in normalized)
+        assertTrue(HotList.name in normalized)
+        assertFalse(Account.name in normalized)
     }
 
     @Test
-    fun normalizeBottomBarSelectionReplacesAccountWithHomeAccountWhenEnabled() {
+    fun normalizeDoesNotForceFillSelectionUpToThreeItems() {
+        // 新规则：允许 1-5 项，两个有效项保持为两项，不会回填到 3
         val normalized = normalizeBottomBarSelection(
             selectedKeys = linkedSetOf(Home.name, Account.name),
             duo3HomeAccount = true,
             enforceMinimumSelection = true,
         )
 
-        assertTrue(Home.name in normalized)
-        assertFalse(Account.name in normalized)
-        assertEquals(3, normalized.size)
+        assertEquals(setOf(Home.name, Account.name), normalized)
     }
 
     @Test

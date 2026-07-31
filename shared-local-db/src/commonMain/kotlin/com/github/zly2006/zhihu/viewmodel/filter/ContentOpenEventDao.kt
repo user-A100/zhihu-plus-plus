@@ -21,6 +21,11 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 
+data class ContentLastOpened(
+    val contentKey: String,
+    val lastOpenedAt: Long,
+)
+
 @Dao
 interface ContentOpenEventDao {
     @Insert
@@ -35,4 +40,15 @@ interface ContentOpenEventDao {
         """,
     )
     suspend fun getOpenedContentKeysByKeys(keys: List<String>): List<String>
+
+    /** 返回收藏重温排序所需的最后阅读时间，不暴露或复制完整历史。 */
+    @Query(
+        """
+        SELECT contentType || ':' || contentId AS contentKey, MAX(openedAt) AS lastOpenedAt
+        FROM ${ContentOpenEvent.TABLE_NAME}
+        WHERE (contentType || ':' || contentId) IN (:keys)
+        GROUP BY contentType, contentId
+        """,
+    )
+    suspend fun getLastOpenedByKeys(keys: List<String>): List<ContentLastOpened>
 }

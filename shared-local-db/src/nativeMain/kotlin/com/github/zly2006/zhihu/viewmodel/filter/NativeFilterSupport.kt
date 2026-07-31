@@ -36,6 +36,8 @@ private val emptyContentFilterDatabase = object : ContentFilterDatabase() {
 
     override fun contentOpenEventDao(): ContentOpenEventDao = emptyContentOpenEventDao
 
+    override fun collectionIndexDao(): CollectionIndexDao = emptyCollectionIndexDao
+
     override fun blockedKeywordDao(): BlockedKeywordDao = emptyBlockedKeywordDao
 
     override fun blockedUserDao(): BlockedUserDao = emptyBlockedUserDao
@@ -73,6 +75,49 @@ private val emptyContentOpenEventDao = object : ContentOpenEventDao {
     override suspend fun insert(event: ContentOpenEvent): Long = 0L
 
     override suspend fun getOpenedContentKeysByKeys(keys: List<String>): List<String> = emptyList()
+
+    override suspend fun getLastOpenedByKeys(keys: List<String>): List<ContentLastOpened> = emptyList()
+}
+
+private val emptyCollectionIndexDao = object : CollectionIndexDao {
+    override suspend fun getAllItems(): List<CollectionIndexItem> = emptyList()
+
+    override suspend fun getAllSyncStates(): List<CollectionSyncState> = emptyList()
+
+    override suspend fun getAllExposures(): List<CollectionExposure> = emptyList()
+
+    override suspend fun getSyncState(collectionId: String): CollectionSyncState? = null
+
+    override suspend fun getExposure(contentKey: String): CollectionExposure? = null
+
+    override suspend fun upsertItems(items: List<CollectionIndexItem>) = Unit
+
+    override suspend fun upsertSyncState(state: CollectionSyncState) = Unit
+
+    override suspend fun upsertExposure(exposure: CollectionExposure) = Unit
+
+    override suspend fun deleteItemsForCollection(collectionId: String) = Unit
+
+    override suspend fun deleteItemsOutsideCollections(collectionIds: List<String>) = Unit
+
+    override suspend fun deleteStatesOutsideCollections(collectionIds: List<String>) = Unit
+
+    override suspend fun deleteAllItems() = Unit
+
+    override suspend fun deleteAllSyncStates() = Unit
+
+    override suspend fun replaceCollection(
+        collectionId: String,
+        items: List<CollectionIndexItem>,
+        state: CollectionSyncState,
+    ) = Unit
+
+    override suspend fun retainCollections(collectionIds: List<String>) = Unit
+
+    override suspend fun recordExposure(
+        contentKey: String,
+        exposedAt: Long,
+    ) = Unit
 }
 
 private val emptyBlockedKeywordDao = object : BlockedKeywordDao {

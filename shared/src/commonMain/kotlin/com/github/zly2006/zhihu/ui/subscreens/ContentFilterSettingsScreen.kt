@@ -18,6 +18,7 @@
 package com.github.zly2006.zhihu.ui.subscreens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -57,12 +60,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.github.zly2006.zhihu.navigation.Account
 import com.github.zly2006.zhihu.navigation.LocalNavigator
+import com.github.zly2006.zhihu.shared.data.COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY
+import com.github.zly2006.zhihu.shared.data.HOME_CONTENT_SOURCE_PREFERENCE_KEY
+import com.github.zly2006.zhihu.shared.data.HomeContentSource
 import com.github.zly2006.zhihu.shared.data.RecommendationMode
 import com.github.zly2006.zhihu.shared.filter.ContentFilterStats
 import com.github.zly2006.zhihu.shared.filter.rememberContentFilterMaintenance
@@ -73,6 +80,8 @@ import com.github.zly2006.zhihu.ui.AUTO_REFRESH_HOME_ON_STARTUP_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.components.SettingItem
 import com.github.zly2006.zhihu.ui.components.SettingItemGroup
 import com.github.zly2006.zhihu.ui.components.SettingItemWithSwitch
+import com.github.zly2006.zhihu.viewmodel.filter.CollectionSyncState
+import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -96,6 +105,18 @@ fun ContentFilterSettingsScreen(
     val filterMaintenance = rememberContentFilterMaintenance()
     val userMessages = rememberUserMessageSink()
     val highlightedSetting = setting.orEmpty()
+    var homeContentSource by remember {
+        mutableStateOf(
+            HomeContentSource.fromKey(
+                settings.getString(HOME_CONTENT_SOURCE_PREFERENCE_KEY, HomeContentSource.RECOMMENDATION.key),
+            ),
+        )
+    }
+    var showCollectionScopeDialog by remember { mutableStateOf(false) }
+    var availableCollections by remember { mutableStateOf(emptyList<CollectionSyncState>()) }
+    var selectedCollectionIds by remember {
+        mutableStateOf(settings.getStringSet(COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY, emptySet()))
+    }
 
     val scrollState = rememberScrollState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -143,7 +164,54 @@ fun ContentFilterSettingsScreen(
         ) {
             SettingItemGroup {
                 SettingItem(
+                    title = { Text("首页内容来源") },
+                    description = { Text(homeContentSource.description) },
+                    settingKey = HOME_CONTENT_SOURCE_PREFERENCE_KEY,
+                    highlightedKey = highlightedSetting,
+                    endAction = {
+                        var expanded by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(
+                            expanded = expanded,
+                            onExpandedChange = { expanded = it },
+                            modifier = Modifier.width(256.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = homeContentSource.displayName,
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                                modifier = Modifier
+                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable, true)
+                                    .testTag("contentFilterSettings:homeContentSourceField"),
+                            )
+                            ExposedDropdownMenu(
+                                expanded = expanded,
+                                onDismissRequest = { expanded = false },
+                            ) {
+                                HomeContentSource.entries.forEach { source ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(source.displayName)
+                                                Text(source.description, style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        },
+                                        onClick = {
+                                            homeContentSource = source
+                                            settings.putString(HOME_CONTENT_SOURCE_PREFERENCE_KEY, source.key)
+                                            expanded = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    },
+                )
+
+                SettingItem(
                     title = { Text("推荐算法") },
+                    description = { Text("仅在首页内容来源为“知乎推荐”时生效") },
+                    enabled = homeContentSource == HomeContentSource.RECOMMENDATION,
                     settingKey = "recommendationMode",
                     highlightedKey = highlightedSetting,
                     endAction = {
@@ -159,7 +227,11 @@ fun ContentFilterSettingsScreen(
 
                         ExposedDropdownMenuBox(
                             expanded = expanded,
-                            onExpandedChange = { expanded = !expanded },
+                            onExpandedChange = {
+                                if (homeContentSource == HomeContentSource.RECOMMENDATION) {
+                                    expanded = !expanded
+                                }
+                            },
                             modifier = Modifier.width(256.dp),
                         ) {
                             OutlinedTextField(
@@ -207,6 +279,7 @@ fun ContentFilterSettingsScreen(
                         isLoginForRecommendation.value = checked
                         settings.putBoolean("loginForRecommendation", checked)
                     },
+                    enabled = homeContentSource == HomeContentSource.RECOMMENDATION,
                     settingKey = "loginForRecommendation",
                     highlightedKey = highlightedSetting,
                 )
@@ -223,7 +296,32 @@ fun ContentFilterSettingsScreen(
                         autoRefreshHomeOnStartup.value = checked
                         settings.putBoolean(AUTO_REFRESH_HOME_ON_STARTUP_PREFERENCE_KEY, checked)
                     },
+                    enabled = homeContentSource == HomeContentSource.RECOMMENDATION,
                     settingKey = AUTO_REFRESH_HOME_ON_STARTUP_PREFERENCE_KEY,
+                    highlightedKey = highlightedSetting,
+                )
+
+                SettingItem(
+                    title = { Text("参与收藏重温的收藏夹") },
+                    description = {
+                        Text(
+                            if (selectedCollectionIds.isEmpty()) {
+                                "全部已索引收藏夹"
+                            } else {
+                                "已选择 ${selectedCollectionIds.size} 个收藏夹"
+                            },
+                        )
+                    },
+                    enabled = homeContentSource == HomeContentSource.COLLECTION_REVISIT,
+                    onClick = {
+                        if (homeContentSource == HomeContentSource.COLLECTION_REVISIT) {
+                            showCollectionScopeDialog = true
+                        }
+                    },
+                    endAction = {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+                    },
+                    settingKey = COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY,
                     highlightedKey = highlightedSetting,
                 )
             }
@@ -556,5 +654,99 @@ fun ContentFilterSettingsScreen(
                 )
             }
         }
+    }
+
+    if (showCollectionScopeDialog) {
+        var dialogSelection by remember(showCollectionScopeDialog) {
+            mutableStateOf(selectedCollectionIds)
+        }
+        var useAllCollections by remember(showCollectionScopeDialog) {
+            mutableStateOf(selectedCollectionIds.isEmpty())
+        }
+        LaunchedEffect(showCollectionScopeDialog) {
+            availableCollections = getContentFilterDatabase()
+                .collectionIndexDao()
+                .getAllSyncStates()
+                .filter(CollectionSyncState::completed)
+        }
+        AlertDialog(
+            onDismissRequest = { showCollectionScopeDialog = false },
+            title = { Text("参与首页重温的收藏夹") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                useAllCollections = true
+                                dialogSelection = emptySet()
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = useAllCollections,
+                            onCheckedChange = null,
+                        )
+                        Text("全部已索引收藏夹")
+                    }
+                    availableCollections.forEach { collection ->
+                        val checked = !useAllCollections && collection.collectionId in dialogSelection
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    useAllCollections = false
+                                    dialogSelection = if (checked) {
+                                        dialogSelection - collection.collectionId
+                                    } else {
+                                        dialogSelection + collection.collectionId
+                                    }
+                                },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null,
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(collection.collectionTitle)
+                                Text(
+                                    "${collection.itemCount} 条收藏",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    if (availableCollections.isEmpty()) {
+                        Text(
+                            "请先在“收藏”页完成一次同步。",
+                            modifier = Modifier.padding(vertical = 16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        selectedCollectionIds = if (useAllCollections) emptySet() else dialogSelection
+                        settings.putStringSet(COLLECTION_HOME_SELECTED_IDS_PREFERENCE_KEY, selectedCollectionIds)
+                        showCollectionScopeDialog = false
+                    },
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCollectionScopeDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
     }
 }
