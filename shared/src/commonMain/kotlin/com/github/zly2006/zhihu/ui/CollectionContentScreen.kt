@@ -59,6 +59,7 @@ import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.ArticleType
 import com.github.zly2006.zhihu.navigation.CollectionAnswerNavigator
 import com.github.zly2006.zhihu.navigation.LocalNavigator
+import com.github.zly2006.zhihu.shared.data.FeedDisplayItem
 import com.github.zly2006.zhihu.shared.data.navDestination
 import com.github.zly2006.zhihu.shared.platform.PlatformBackHandler
 import com.github.zly2006.zhihu.ui.components.FeedCard
@@ -183,11 +184,15 @@ fun CollectionContentBody(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
     tagPrefix: String,
+    filter: ((FeedDisplayItem) -> Boolean)? = null,
 ) {
     val navigator = LocalNavigator.current
     val sharedData = environment.articleAnswerSwitchState()
+    val items = remember(viewModel.displayItems.toList(), filter) {
+        if (filter != null) viewModel.displayItems.filter(filter) else viewModel.displayItems
+    }
     PaginatedList(
-        items = viewModel.displayItems,
+        items = items,
         onLoadMore = { viewModel.loadMore(environment) },
         isEnd = { viewModel.isEnd },
         listState = listState,

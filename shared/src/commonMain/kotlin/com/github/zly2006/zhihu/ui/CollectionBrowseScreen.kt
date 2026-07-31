@@ -19,18 +19,22 @@ package com.github.zly2006.zhihu.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -47,6 +51,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.zly2006.zhihu.navigation.LocalNavigator
+import com.github.zly2006.zhihu.shared.data.FeedDisplayItem
 import com.github.zly2006.zhihu.shared.ui.TopLevelReselectAction
 import com.github.zly2006.zhihu.shared.ui.topLevelReselectAction
 import com.github.zly2006.zhihu.viewmodel.CollectionContentEnvironment
@@ -83,6 +88,8 @@ fun CollectionBrowseScreen(
 
     var selectedCollectionId by remember { mutableStateOf<String?>(null) }
     var folderMenuExpanded by remember { mutableStateOf(false) }
+    var searchVisible by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(useTestCollections) {
         if (!useTestCollections && collectionsViewModel.allData.isEmpty()) {
@@ -130,10 +137,22 @@ fun CollectionBrowseScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = contentViewModel?.title ?: "收藏",
-                        modifier = Modifier.testTag("collection_browse_title"),
-                    )
+                    if (searchVisible) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            placeholder = { Text("搜索当前收藏夹") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("collection_browse_search_field"),
+                        )
+                    } else {
+                        Text(
+                            text = contentViewModel?.title ?: "收藏",
+                            modifier = Modifier.testTag("collection_browse_title"),
+                        )
+                    }
                 },
                 navigationIcon = {
                     if (showBackButton) {
@@ -146,6 +165,18 @@ fun CollectionBrowseScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            searchVisible = !searchVisible
+                            if (!searchVisible) searchQuery = ""
+                        },
+                        modifier = Modifier.testTag("collection_browse_search_action"),
+                    ) {
+                        Icon(
+                            if (searchVisible) Icons.Filled.Close else Icons.Filled.Search,
+                            contentDescription = "搜索",
+                        )
+                    }
                     Box {
                         IconButton(
                             onClick = { folderMenuExpanded = true },
@@ -210,6 +241,13 @@ fun CollectionBrowseScreen(
                         .padding(innerPadding),
                     listState = listState,
                     tagPrefix = "collection_browse",
+                    filter = searchQuery.takeIf { it.isNotBlank() }?.lowercase()?.let { needle ->
+                        { item: FeedDisplayItem ->
+                            item.title.lowercase().contains(needle) ||
+                                item.summary?.lowercase()?.contains(needle) == true ||
+                                item.authorName?.lowercase()?.contains(needle) == true
+                        }
+                    },
                 )
             }
         }
